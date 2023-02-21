@@ -8,15 +8,15 @@ void fill(float* arr){
 	#pragma acc kernels
 	{
 	for(int i = 0; i < 10000000; i++){
-		arr[i] = sin(j);
+		arr[i] = sinf(j);
 
 		j += (2 * 3.14) / 10000000;
 	}
 	}
 }
 
-double calculate(float* arr){
-	double sum = 0;
+float calculate(float* arr){
+	float sum = 0;
 
 	#pragma acc kernels
 	{
@@ -28,7 +28,7 @@ double calculate(float* arr){
 
 int main(){
 	float* arr;
-	double sum;
+	float sum;
 	
 	arr = malloc(sizeof(float) * 10000000);
 
