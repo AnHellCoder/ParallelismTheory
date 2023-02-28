@@ -1,2 +1,3 @@
-I have written the program that counts sum of array of sines. Following my report that I have done using profiling data, double took less time
-for execution. Their exacts were the same.
+I have written the program that counts sum of array of sines.
+Following my report that I have done using profiling data,
+float took less time than double for execution. Their exacts were the same.
