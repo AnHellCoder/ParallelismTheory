@@ -70,17 +70,17 @@ int main(int argc, char** argv){
 	{
 	while(iter < itermax && err > exact){
 		iter++;
-		double alpha = -1.0;
+		float alpha = -1.0;
 		int index = 0;
 
-		for(int i = 0; i < size; i++){
-			for(int j = 0; j < size; j++){
-				#pragma acc kernels
-				printf("%lf ", arrnew[i * size + j]);
-			}
-			printf("\n");
-		}
-		printf("\n");
+		//for(int i = 0; i < size; i++){
+		//	for(int j = 0; j < size; j++){
+		//		#pragma acc kernels
+		//		printf("%lf ", arrnew[i * size + j]);
+		//	}
+		//	printf("\n");
+		//}
+		//printf("\n");
 
 		#pragma acc data present(arrprev, arrnew)
 		//#pragma acc parallel loop independent collapse(2) vector vector_length(256) gang num_gangs(256)
@@ -98,45 +98,91 @@ int main(int argc, char** argv){
 
 		//Calculating error every 100 iterations
 		if(iter % 100 == 0){
+
+			printf("arrprev:\n");
 			for(int i = 0; i < size; i++){
 				for(int j = 0; j < size; j++){
 					#pragma acc kernels
-					printf("%lf ", arrerr[i * size + j]);
+					printf("%lf ", arrprev[i * size + j]);
 				}
 				printf("\n");
 			}
 			printf("\n");
 
+			printf("arrnew:\n");
+			for(int i = 0; i < size; i++){
+				for(int j = 0; j < size; j++){
+					#pragma acc kernels
+					printf("%lf ", arrnew[i * size + j]);
+				}
+				printf("\n");
+			}
+			printf("\n");
+
+			//printf("Error net before:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrerr[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("\n");
+
 			#pragma acc data present(arrprev, arrnew, arrerr)
 			#pragma acc host_data use_device(arrprev, arrnew, arrerr)
 			{
-			status = cublasDcopy(handler, size, arrnew, 1, arrerr, 1);
+			status = cublasDcopy(handler, size * size, arrnew, 1, arrerr, 1);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("COPY ERROR!");
 				exit(EXIT_FAILURE);
 			}
 
-			status = cublasDaxpy(handler, size, &alpha, arrprev, 1, arrerr, 1);
+			//printf("Error net after copy:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrerr[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("Status=%d\n", status);
+			//printf("\n");
+
+			status = cublasDaxpy(handler, size * size, &alpha, arrprev, 1, arrerr, 1);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("AXPY ERROR!");
 				exit(EXIT_FAILURE);
 			}
 
-			status = cublasIdamax(handler, size, arrerr, 1, &index);
+			//printf("Error net after axpy func:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrerr[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("Status=%d\n", status);
+			//printf("\n");
+
+			status = cublasIdamax(handler, size * size, arrerr, 1, &index);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("MAX ERROR!");
 				exit(EXIT_FAILURE);
 			}
 			}
 
-			for(int i = 0; i < size; i++){
-				for(int j = 0; j < size; j++){
-					#pragma acc kernels
-					printf("%lf ", arrerr[i * size + j]);
-				}
-				printf("\n");
-			}
-			printf("\n");
+			//printf("Error net after:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrerr[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("Status=%d\n", status);
+			//printf("\n");
 
 			#pragma acc update host(arrerr[index - 1])
 			err = abs(arrerr[index - 1]);
