@@ -66,15 +66,15 @@ int main(int argc, char** argv){
 	}
 
 	//Start computing
-	#pragma acc data copy(err) copyin(arrprev[:size*size], arrnew[:size*size], arrerr[:size*size])
+	#pragma acc data copy(err) copyin(arrprev[:size*size], arrnew[:size*size], arrerr[:size*size]) //Copy data to GPU
 	{
 	while(iter < itermax && err > exact){
 		iter++;
 		double alpha = -1.0;
 		int index = 0;
 
-		#pragma acc data present(arrprev, arrnew)
-		#pragma acc parallel loop gang worker num_workers(4) vector_length(128)
+		#pragma acc data present(arrprev, arrnew) //Update pointers
+		#pragma acc parallel loop collapse(2) gang worker num_workers(4) vector vector_length(128) //Collapse two loops into single
 		//Calculating new cell
 		for(int i = 1; i < size - 1; i++){
 			for(int j = 1; j < size - 1; j++){
