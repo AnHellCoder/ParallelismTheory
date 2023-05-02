@@ -58,14 +58,14 @@ int main(int argc, char** argv){
 		arrprev[i * size + k] = arrprev[(i - 1) * size + k] + step;
 	}
 
-
-	//#pragma acc data copyin(arrprev[:size], arrnew[:size], arrerr[:size])
+	//Copy old array to new array
 	for(int i = 0; i < size; i++){
 		for(int j = 0; j < size; j++){
 			arrnew[i * size + j] = arrprev[i * size + j];
 		}
 	}
 
+	//Start computing
 	#pragma acc data copy(err) copyin(arrprev[:size*size], arrnew[:size*size], arrerr[:size*size])
 	{
 	while(iter < itermax && err > exact){
@@ -73,18 +73,9 @@ int main(int argc, char** argv){
 		double alpha = -1.0;
 		int index = 0;
 
-		//for(int i = 0; i < size; i++){
-		//	for(int j = 0; j < size; j++){
-		//		#pragma acc kernels
-		//		printf("%lf ", arrnew[i * size + j]);
-		//	}
-		//	printf("\n");
-		//}
-		//printf("\n");
-
 		#pragma acc data present(arrprev, arrnew)
-		//#pragma acc parallel loop independent collapse(2) vector vector_length(256) gang num_gangs(256)
 		#pragma acc parallel loop gang worker num_workers(4) vector_length(128)
+		//Calculating new cell
 		for(int i = 1; i < size - 1; i++){
 			for(int j = 1; j < size - 1; j++){
 				int n = i * size + j;
@@ -96,93 +87,32 @@ int main(int argc, char** argv){
 			}
 		}
 
-		//Calculating error every 100 iterations
+		//Calculate the error every 100 iterations
 		if(iter % 100 == 0){
-
-			//printf("arrprev:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%lf ", arrprev[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("\n");
-
-			//printf("arrnew:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%lf ", arrnew[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("\n");
-
-			//printf("Error net before:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%lf ", arrerr[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("\n");
-
 			#pragma acc data present(arrprev, arrnew, arrerr)
 			#pragma acc host_data use_device(arrprev, arrnew, arrerr)
 			{
+			//Copy new array to error array
 			status = cublasDcopy(handler, size * size, arrnew, 1, arrerr, 1);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("COPY ERROR!");
 				exit(EXIT_FAILURE);
 			}
 
-			//printf("Error net after copy:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%lf ", arrerr[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("Status=%d\n", status);
-			//printf("\n");
-
+			//Calculate the error, substracting old array array from copy of new array
 			status = cublasDaxpy(handler, size * size, &alpha, arrprev, 1, arrerr, 1);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("AXPY ERROR!");
 				exit(EXIT_FAILURE);
 			}
 
-			//printf("Error net after axpy func:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%lf ", arrerr[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("Status=%d\n", status);
-			//printf("\n");
-
+			//Find maximum from the result of previous function
 			status = cublasIdamax(handler, size * size, arrerr, 1, &index);
 			if(status != CUBLAS_STATUS_SUCCESS){
 				printf("MAX ERROR!");
 				exit(EXIT_FAILURE);
 			}
 			}
-
-			//printf("Error net after:\n");
-			//for(int i = 0; i < size; i++){
-			//	for(int j = 0; j < size; j++){
-			//		#pragma acc kernels
-			//		printf("%d %lf ", i * size + j, arrerr[i * size + j]);
-			//	}
-			//	printf("\n");
-			//}
-			//printf("Status=%d\n", status);
-			//printf("\n");
 
 			#pragma acc update host(arrerr[index - 1])
 			err = arrerr[index - 1];
