@@ -30,14 +30,14 @@ int main(int argc, char** argv){
 	}
 
 	//initialization
-	float err = 1.0, exact = 0.000001;
+	double err = 1.0, exact = 0.000001;
 	int size = atoi(argv[1]), itermax = atoi(argv[2]), iter = 0;
 
-	float* arrprev, *arrnew, *arrerr;
+	double* arrprev, *arrnew, *arrerr;
 
-	arrprev = malloc(sizeof(float) * (size * size));
-	arrnew = malloc(sizeof(float) * (size * size));
-	arrerr = malloc(sizeof(float) * (size * size));
+	arrprev = malloc(sizeof(double) * (size * size));
+	arrnew = malloc(sizeof(double) * (size * size));
+	arrerr = malloc(sizeof(double) * (size * size));
 	for(int i = 0; i < size; i++){
 		for(int j = 0; j < size; j++){
 			arrprev[i * size + j] = 0;
@@ -50,7 +50,7 @@ int main(int argc, char** argv){
 	arrprev[k] = 20;
 	arrprev[k * size] = 20;
 	arrprev[k * size + k] = 30;
-	float step = (float)10/size;
+	double step = (double)10/size;
 	for(int i = 1; i < k; i++){
 		arrprev[i] = arrprev[i - 1] + step;
 		arrprev[i * size] = arrprev[(i - 1) * size] + step;
@@ -70,7 +70,7 @@ int main(int argc, char** argv){
 	{
 	while(iter < itermax && err > exact){
 		iter++;
-		float alpha = -1.0;
+		double alpha = -1.0;
 		int index = 0;
 
 		//for(int i = 0; i < size; i++){
@@ -99,25 +99,25 @@ int main(int argc, char** argv){
 		//Calculating error every 100 iterations
 		if(iter % 100 == 0){
 
-			printf("arrprev:\n");
-			for(int i = 0; i < size; i++){
-				for(int j = 0; j < size; j++){
-					#pragma acc kernels
-					printf("%lf ", arrprev[i * size + j]);
-				}
-				printf("\n");
-			}
-			printf("\n");
+			//printf("arrprev:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrprev[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("\n");
 
-			printf("arrnew:\n");
-			for(int i = 0; i < size; i++){
-				for(int j = 0; j < size; j++){
-					#pragma acc kernels
-					printf("%lf ", arrnew[i * size + j]);
-				}
-				printf("\n");
-			}
-			printf("\n");
+			//printf("arrnew:\n");
+			//for(int i = 0; i < size; i++){
+			//	for(int j = 0; j < size; j++){
+			//		#pragma acc kernels
+			//		printf("%lf ", arrnew[i * size + j]);
+			//	}
+			//	printf("\n");
+			//}
+			//printf("\n");
 
 			//printf("Error net before:\n");
 			//for(int i = 0; i < size; i++){
@@ -177,7 +177,7 @@ int main(int argc, char** argv){
 			//for(int i = 0; i < size; i++){
 			//	for(int j = 0; j < size; j++){
 			//		#pragma acc kernels
-			//		printf("%lf ", arrerr[i * size + j]);
+			//		printf("%d %lf ", i * size + j, arrerr[i * size + j]);
 			//	}
 			//	printf("\n");
 			//}
@@ -185,12 +185,12 @@ int main(int argc, char** argv){
 			//printf("\n");
 
 			#pragma acc update host(arrerr[index - 1])
-			err = abs(arrerr[index - 1]);
+			err = arrerr[index - 1];
 		}
 			
 
 		//Array swap
-		float* temp = arrprev;
+		double* temp = arrprev;
 		arrprev = arrnew;
 		arrnew = temp;
 
