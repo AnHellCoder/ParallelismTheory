@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 
+
 using namespace std;
 
 void print_error(){
@@ -15,17 +16,19 @@ void print_help(){
 }
 
 __global__ void init(double* arr, int size){
-	int i = blockIdx.x * blockDim.x + threadIdx.x;
-
-	if(i == size) return;
-
-	double step = ((double)10/size) * i;
-
 	int k = size - 1;
-	arr[i * size] = 10 + step;
-	arr[i] = 10 + step;
-	arr[k * size + i] = 20 + step;
-	arr[i * size + k] = 20 + step;
+	double step = (double)10/size;
+
+	arr[0] = 10;
+	arr[k] = 20;
+	arr[k * size] = 20;
+	arr[k * size + k] = 30;
+	for(int i = 1; i < k; i++){
+		arr[i] = arr[i - 1] + step;
+		arr[k * size + i] = arr[k * size + (i - 1)] + step;
+		arr[i * size] = arr[(i - 1) * size] + step;
+		arr[i * size + k] = arr[(i - 1) * size + k] + step;
+	}
 }
 
 __global__ void compute(double* arrnew, double* arrprev, int size){
@@ -37,17 +40,27 @@ __global__ void compute(double* arrnew, double* arrprev, int size){
 	arrnew[i] = 0.25 * (arrprev[i - 1] + arrprev[i + 1] + arrprev[i - size] + arrprev[i + size]);
 }
 
-__host__ double loss_recalculate(double loss, double* arrnew, double* arrprev){
+__global__ void loss_calculate(double* arrnew, double* arrprev, double* arrloss){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
-	loss = fmax(loss, arrnew[i] - arrprev[i]);
+	arrloss[i] = arrnew[i] - arrprev[i];
+}
 
-	return loss;
+__global__ void printArr(double* arr, int size){
+	for(int i = 0; i < size; i++){
+		for(int j = 0; j < size; j++){
+			printf("%lf ", arr[i * size + j]);
+		}
+		printf("\n");
+	}
 }
 
 int main(int argc, char* argv[]){
+	clock_t begin = clock();
+	cudaSetDevice(3);
+
 	double acc, loss = 1.0;
-	int iter, lim, size;
+	int iter = 0, lim, size;
 
 	//Argument parsing
 	string* args = new string[argc];
@@ -82,18 +95,45 @@ int main(int argc, char* argv[]){
 
 	double* arrprev;
 	double* arrnew;
+	double* arrloss;
+	double* temp_storage = NULL;
+	double* cudaLoss;
+
+	size_t ts_bytes;
+
+	cudaMalloc(&cudaLoss, sizeof(double));
 
 	cudaMalloc(&arrprev, sizeof(double) * (size * size));
 	cudaMalloc(&arrnew, sizeof(double) * (size * size));
+	cudaMalloc(&arrloss, sizeof(double) * (size * size));
 
-	init<<<size, size>>>(arrprev, size);
-	init<<<size, size>>>(arrnew, size);
+	init<<<1, 1>>>(arrprev, size);
+	init<<<1, 1>>>(arrnew, size);
 
-	compute<<<size, size>>>(arrnew, arrprev, size);
+	while(loss > acc && iter <= lim){
+		iter++;
 
-	loss_recalculate<<<size, size>>>(loss, arrnew, arrprev);
+		compute<<<size, size>>>(arrnew, arrprev, size);
 
-	cout << loss << endl;
+		loss_calculate<<<size, size>>>(arrnew, arrprev, arrloss);
+
+		cudaMalloc(&cudaLoss, sizeof(double));
+		cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
+		cudaMalloc(&temp_storage, ts_bytes);
+		cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
+
+		swap(arrprev, arrnew);
+
+		if(iter % 100 == 0){
+			clock_t mid = clock();
+			double te = (double)(mid - begin)/CLOCKS_PER_SEC;
+
+			cout << "On " << iter << " iteration loss equals: " << loss << endl;
+			cout << "Time elapsed: " << te << endl;
+		}
+
+		cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
+	}
 
 	return 0;
 }
