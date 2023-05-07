@@ -115,16 +115,16 @@ int main(int argc, char* argv[]){
 
 		compute<<<size, size>>>(arrnew, arrprev, size);
 
-		loss_calculate<<<size, size>>>(arrnew, arrprev, arrloss);
-
-		cudaMalloc(&cudaLoss, sizeof(double));
-		cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
-		cudaMalloc(&temp_storage, ts_bytes);
-		cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
-
-		swap(arrprev, arrnew);
-
 		if(iter % 100 == 0){
+			loss_calculate<<<size, size>>>(arrnew, arrprev, arrloss);
+
+			cudaMalloc(&cudaLoss, sizeof(double));
+			cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
+			cudaMalloc(&temp_storage, ts_bytes);
+			cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
+
+			cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
+
 			clock_t mid = clock();
 			double te = (double)(mid - begin)/CLOCKS_PER_SEC;
 
@@ -132,7 +132,8 @@ int main(int argc, char* argv[]){
 			cout << "Time elapsed: " << te << endl;
 		}
 
-		cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
+		swap(arrprev, arrnew);
+		//cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
 	}
 
 	return 0;
