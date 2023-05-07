@@ -2,19 +2,21 @@
 #include <cuda_runtime.h>
 #include <cub/cub.cuh>
 
-
 using namespace std;
 
+//Print when incorrect args sent
 void print_error(){
 	cout << "Arguments were not parsed correctly!" << endl;
 	cout << "Print --help to get help" << endl;
 }
 
+//Print when arg '--help' sent
 void print_help(){
 	cout << "How to send args through cmd:" << endl;
 	cout << "--accuracy <double> --size <int> --limit <int>" << endl;
 }
 
+//Array initialization
 __global__ void init(double* arr, int size){
 	int k = size - 1;
 	double step = (double)10/size;
@@ -31,6 +33,7 @@ __global__ void init(double* arr, int size){
 	}
 }
 
+//compute new array
 __global__ void compute(double* arrnew, double* arrprev, int size){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
@@ -40,12 +43,14 @@ __global__ void compute(double* arrnew, double* arrprev, int size){
 	arrnew[i] = 0.25 * (arrprev[i - 1] + arrprev[i + 1] + arrprev[i - size] + arrprev[i + size]);
 }
 
+//calculate loss
 __global__ void loss_calculate(double* arrnew, double* arrprev, double* arrloss){
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 
 	arrloss[i] = arrnew[i] - arrprev[i];
 }
 
+//print array on GPU
 __global__ void printArr(double* arr, int size){
 	for(int i = 0; i < size; i++){
 		for(int j = 0; j < size; j++){
@@ -56,8 +61,8 @@ __global__ void printArr(double* arr, int size){
 }
 
 int main(int argc, char* argv[]){
+	//Start execution
 	clock_t begin = clock();
-	cudaSetDevice(3);
 
 	double acc, loss = 1.0;
 	int iter = 0, lim, size;
@@ -90,9 +95,11 @@ int main(int argc, char* argv[]){
 	}
 	//End argument parsing
 
+	//Stream initialization
 	cudaStream_t stream;
 	cudaStreamCreate(&stream);
 
+	//Initialization of arrays
 	double* arrprev;
 	double* arrnew;
 	double* arrloss;
@@ -107,24 +114,30 @@ int main(int argc, char* argv[]){
 	cudaMalloc(&arrnew, sizeof(double) * (size * size));
 	cudaMalloc(&arrloss, sizeof(double) * (size * size));
 
+	//Primary initialization
 	init<<<1, 1>>>(arrprev, size);
 	init<<<1, 1>>>(arrnew, size);
 
+	//Start computing
 	while(loss > acc && iter <= lim){
 		iter++;
 
 		compute<<<size, size>>>(arrnew, arrprev, size);
 
+		//Calculate loss every 100 iterations
 		if(iter % 100 == 0){
 			loss_calculate<<<size, size>>>(arrnew, arrprev, arrloss);
 
+			//Calculate max loss in loss array and read it into one-element array cudaLoss
 			cudaMalloc(&cudaLoss, sizeof(double));
 			cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
 			cudaMalloc(&temp_storage, ts_bytes);
 			cub::DeviceReduce::Max(temp_storage, ts_bytes, arrloss, cudaLoss, (size * size));
 
+			//read cudaLoss value into loss variable
 			cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
 
+			//Print elapsed time, number of passed iterations and actual loss
 			clock_t mid = clock();
 			double te = (double)(mid - begin)/CLOCKS_PER_SEC;
 
@@ -132,9 +145,10 @@ int main(int argc, char* argv[]){
 			cout << "Time elapsed: " << te << endl;
 		}
 
+		//Array swap
 		swap(arrprev, arrnew);
-		//cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
 	}
+	//End computing
 
 	return 0;
 }
