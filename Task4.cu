@@ -54,7 +54,7 @@ __global__ void loss_calculate(double* arrnew, double* arrprev, double* arrloss)
 __global__ void printArr(double* arr, int size){
 	for(int i = 0; i < size; i++){
 		for(int j = 0; j < size; j++){
-			printf("%lf ", arr[i * size + j]);
+			printf("%.2f ", arr[i * size + j]);
 		}
 		printf("\n");
 	}
@@ -118,6 +118,8 @@ int main(int argc, char* argv[]){
 	init<<<1, 1>>>(arrprev, size);
 	init<<<1, 1>>>(arrnew, size);
 
+	printArr<<<1, 1>>>(arrprev, size);
+
 	//Start computing
 	while(loss > acc && iter <= lim){
 		iter++;
@@ -137,6 +139,8 @@ int main(int argc, char* argv[]){
 			//read cudaLoss value into loss variable
 			cudaMemcpy(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
 
+			cudaFree(cudaLoss);
+
 			//Print elapsed time, number of passed iterations and actual loss
 			clock_t mid = clock();
 			double te = (double)(mid - begin)/CLOCKS_PER_SEC;
@@ -149,6 +153,17 @@ int main(int argc, char* argv[]){
 		swap(arrprev, arrnew);
 	}
 	//End computing
+
+	printArr<<<1, 1>>>(arrnew, size);
+
+	cudaFree(arrprev);
+	cudaFree(arrnew);
+	cudaFree(arrloss);
+
+	cudaStreamDestroy(stream);
+
+	//Result
+	cout << "On " << iter << " iteration loss descended to " << loss << endl;
 
 	return 0;
 }
