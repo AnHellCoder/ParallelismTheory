@@ -1,0 +1,139 @@
+#include <iostream>
+//#include <cstring>
+//#include <sstream>
+//#include <cmath>
+//#include <ctime>
+
+#include <cuda_runtime.h>
+#include <cub/cub.cuh>
+
+using namespace std;
+
+//Print when incorrect args sent
+void print_error(){
+        cout << "Arguments were not parsed correctly!" << endl;
+        cout << "Print --help to get help" << endl;
+}
+
+//Print when arg '--help' sent
+void print_help(){
+        cout << "How to send args through cmd:" << endl;
+        cout << "--accuracy <double> --size <int> --limit <int>" << endl;
+}
+
+__global__ void iterate(double *arrprev, double *arrnew, int size){
+
+    int j = blockIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if ((j == 0) || (i == 0) || (i == size - 1) || (j == size - 1))
+                return; // Don't update borders
+
+    arrnew[i * size + j] = 0.25 * (arrprev[i * size + j - 1] + arrprev[(i - 1) * size + j] + arrprev[(i + 1) * size + j] + arrprev[i * size + j + 1]);
+}
+
+__global__ void init(double* arr, int size){
+        size_t i = threadIdx.x;
+        arr[i] = 10.0 + i * 10.0 / (size - 1);
+        arr[i * size] = 10.0 + i * 10.0 / (size - 1);
+        arr[size - 1 + i * size] = 20.0 + i * 10.0 / (size - 1);
+        arr[size * (size - 1) + i] = 20.0 + i * 10.0 / (size - 1);
+}
+
+__global__ void loss_calculation(double* arrprev, double* arrnew, int size) {
+        int j = blockIdx.x * blockDim.x + threadIdx.x;
+        int i = blockIdx.y * blockDim.y + threadIdx.y;
+
+        arrnew[i * size + j] = arrprev[i * size + j] - arrnew[i * size + j];
+}
+
+//print array on GPU
+__global__ void printArr(double* arr, int size){
+        for(int i = 0; i < size; i++){
+                for(int j = 0; j < size; j++){
+                        printf("%.2f ", arr[i * size + j]);
+                }
+                printf("\n");
+        }
+}
+
+int main(int argc, char* argv[]){
+        //Initialization
+        clock_t begin = clock();
+
+        cudaSetDevice(3);
+
+        double acc;
+        int lim, size;
+
+        //Arguments preprocessing
+        if(argc == 2 && string(argv[1]) == "--help"){
+                print_help();
+                exit(0);
+        }
+
+        if(string(argv[1]) == "--accuracy") acc = atof(argv[2]);
+        else{
+                print_error();
+                exit(0);
+        }
+
+        if(string(argv[3]) == "--size") size = atoi(argv[4]);
+        else{
+                print_error();
+                exit(0);
+        }
+
+        if(string(argv[5]) == "--limit") lim = atoi(argv[6]);
+        else{
+                print_error();
+                exit(0);
+        }
+
+        cudaSetDevice(3);
+
+        cudaStream_t stream;
+        cudaStreamCreate(&stream);
+        cudaGraph_t graph;
+        cudaGraphExec_t graph_instance;
+
+        dim3 blocks = dim3(size / 32, size / 32);
+        dim3 threads = dim3(32, 32);
+
+        double *arrprev, *arrnew, *cudaLoss, *tempStorage = NULL;
+        size_t tempStorageSize = 0;
+
+        cudaMalloc(&arrprev, sizeof(double) * (size * size));
+        cudaMalloc(&arrnew, sizeof(double) * (size * size));
+        cudaMalloc(&cudaLoss, sizeof(double));
+
+        init<<<1, size>>>(arrprev, size);
+        cudaMemcpy(arrnew, arrprev, sizeof(double) * (size * size), cudaMemcpyDeviceToDevice);
+
+        cub::DeviceReduce::Max(tempStorage, tempStorageSize, arrnew, cudaLoss, (size * size), stream);
+        cudaMalloc(&tempStorage, tempStorageSize);
+        ////////////////////////////////////////////////////////////
+        cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
+
+        for (size_t i = 0; i < 100; i += 2) {
+                iterate<<<blocks, threads, 0, stream>>>(arrprev, arrnew, size);
+                iterate<<<blocks, threads, 0, stream>>>(arrnew, arrprev, size);
+        }
+        loss_calculation<<<blocks, threads, 0, stream>>>(arrprev, arrnew, size);
+        cub::DeviceReduce::Max(tempStorage, tempStorageSize, arrnew, cudaLoss, (size * size), stream);
+        init<<<1, size, 0, stream>>>(arrnew, size);
+
+        cudaStreamEndCapture(stream, &graph);
+        cudaGraphInstantiate(&graph_instance, graph, NULL, NULL, 0);
+        /////////////////////////////////////////////////////////////
+
+        int iter = 0;
+        double loss = 1.0;
+        while(iter < lim && loss > acc) {
+                cudaGraphLaunch(graph_instance, stream);
+                cudaMemcpyAsync(&loss, cudaLoss, sizeof(double), cudaMemcpyDeviceToHost);
+                iter += 100;
+                cout << "On " << iter << " iteration loss equals: " << loss << endl;
+        }
+        clock_t end = clock();
+}
